@@ -1,0 +1,328 @@
+---
+title: "Analysing the NVD database to understand the distribution and severity of vulnerabilities"
+author: "Benjamin C. Dean"
+output:
+  html_document: 
+    keep_md: yes
+  html_notebook: default
+  pdf_document: default
+---
+
+This workbook analyzes data from the National Vulnerability Database (NVD) (https://nvd.nist.gov), which is the U.S. government repository of standards based vulnerability management data represented using the Security Content Automation Protocol (SCAP). The NVD includes databases of security checklist references, security-related software flaws, misconfigurations, product names, and impact metrics.
+
+This latter feature, impact metrics, uses the Common Vulnerability Scoring System (CVSS) to score the impact and severity of each vulnerability. Categorizing vulnerabilities by their relative severity (i.e. of what nature and how serious would the consequences be if the vulnerability were to be exploited) can be useful for our digital defects project. By exploring the NVD and examining the distribution of the known vulnerabilities we are able to better inform efforts to apply the legal concept of 'defects' to these technologies. While it may be true that it is 'difficult to write bug free code' or that 'not all bugs can be known ahead of time', that does not mean that there are known critical vulnerabilities that should be fixed before these technologies are shipped. Identifying the frequency of these vulnerabiltiies appearing helps us set a severity threshold at which a vulnerability would render a product defective. 
+
+To start with we import a series of libraries and create a few functions to permit analysis and visualization of the NVD dataset.
+
+```{r, echo=FALSE, results='hide',message=FALSE, warning = FALSE}
+#library(rjson)
+library(jsonlite)
+library(XML)
+library(ggplot2)
+library(dplyr)
+library(tidyverse)
+library(grid)
+library(plyr)
+library(psych)
+library(ggalt)
+library(eeptools)
+library(plotly)
+library(lubridate)
+
+
+
+multiplot <- function(..., plotlist = NULL, file, cols = 1, layout = NULL) {
+  require(grid)
+
+  plots <- c(list(...), plotlist)
+
+  numPlots = length(plots)
+
+  if (is.null(layout)) {
+    layout <- matrix(seq(1, cols * ceiling(numPlots/cols)),
+                    ncol = cols, nrow = ceiling(numPlots/cols))
+  }
+
+  if (numPlots == 1) {
+    print(plots[[1]])
+
+  } else {
+    grid.newpage()
+    pushViewport(viewport(layout = grid.layout(nrow(layout), ncol(layout))))
+
+    for (i in 1:numPlots) {
+      matchidx <- as.data.frame(which(layout == i, arr.ind = TRUE))
+
+      print(plots[[i]], vp = viewport(layout.pos.row = matchidx$row,
+                                      layout.pos.col = matchidx$col))
+    }
+  }
+}
+```
+### Importing the dataset  
+We then need to import the dataset. This is a JSON format dataset, which requires us to flatten it into a dataframe and to extract the 'CVE_Items' characteristics of each vulnerability as this is our are of interest. For those not yet in possession of the dataset - it can be downloaded here: https://nvd.nist.gov/vuln/data-feeds#JSON_FEED
+
+```{r, echo=FALSE, results='hide',message=FALSE, warning = FALSE}
+#JsonData <- fromJSON(file = "circl-cve-search-expanded.json" )
+#data <- read.table("allitems.csv", fill = T)
+
+jsonData <- fromJSON(txt = "nvdcve-1.0-modified.json", flatten=TRUE)
+str(jsonData)
+CVE_Items <- jsonData[['CVE_Items']]
+data <- CVE_Items
+
+#data <- xmlToDataFrame("nvdcve-2.0-modified.xml", colClasses = NULL, homogeneous = T)
+#xmlRoot(xmlTreeParse(data))
+
+# Turn the impact scores into a factor variable with levels
+as.factor(data$impact.baseMetricV3.cvssV3.confidentialityImpact)
+data$impact.baseMetricV3.cvssV3.confidentialityImpact  = factor(data$impact.baseMetricV3.cvssV3.confidentialityImpact, levels=c("NONE", "LOW", "HIGH"))
+
+as.factor(data$impact.baseMetricV3.cvssV3.integrityImpact)
+data$impact.baseMetricV3.cvssV3.integrityImpact  = factor(data$impact.baseMetricV3.cvssV3.integrityImpact, levels=c("NONE", "LOW", "HIGH"))
+
+as.factor(data$impact.baseMetricV3.cvssV3.availabilityImpact)
+data$impact.baseMetricV3.cvssV3.availabilityImpact  = factor(data$impact.baseMetricV3.cvssV3.availabilityImpact, levels=c("NONE", "LOW", "HIGH"))
+
+```
+
+We end up with a dataframe containing 44 characteristics for each vulnerability and 964 listed vulnerabilities (i.e. 44 columns and 964 rows). The NVD uses two versions of the Common Vulnerability Scoring System (CVSS) - v3 and v2. More information about the differences between these two versions can be found here (https://nvd.nist.gov/vuln-metrics/cvss).
+
+For this analysis, we are going to focus on the variables related to v3 of the CVSS. The aggregate scores calculated using the CVSS have been criticized (https://resources.sei.cmu.edu/asset_files/WhitePaper/2018_019_001_538372.pdf), as is often the case for any score or index that attempts to bring together a variety of different metrics, so we are going to break up and explore the composite parts of the scores, which have a better reputation in the field (https://seclists.org/dailydave/2019/q1/16).  
+
+These variables include:  
+- cve.CVE_data_meta.ID
+
+- impact.baseMetricV3.exploitabilityScore
+- impact.baseMetricV3.impactScore*
+- impact.baseMetricV3.cvssV3.attackComplexity
+- impact.baseMetricV3.cvssV3.confidentialityImpact
+- impact.baseMetricV3.cvssV3.integrityImpact
+- impact.baseMetricV3.cvssV3.availabilityImpact
+- impact.baseMetricV3.cvssV3.baseScore
+- impact.baseMetricV3.cvssV3.baseSeverity*
+
+Throughout this analysis a brief explanation for each variable will be provided when appropriate. For a full description of the variables see (https://www.first.org/cvss/specification-document).  
+
+```{r, echo=FALSE, results='hide',message=FALSE}
+dim(data)
+names(data)
+```
+
+### Exploitability and impact of vulnerabilities
+To begin let us take a look at the exploitability and impact variables. The The Impact metrics reflect the direct consequence of a successful exploit, and represent the consequence to the thing that suffers the impact, which we refer to formally as the impacted component.
+
+The three impact variables - confidentiality, integrity and availability - have been cleaned (i.e. changed from categorical variables to a factor variable with levels). They can then can be plotted alongside one another to see if there are any noteworthy aspects to the distribution. Across all three variables we see that around 1/3 of the known vulnerabilities have a 'High' impact rating. 
+
+```{r, echo=FALSE, results='hide',message=FALSE}
+
+a1 <- 
+  data %>% 
+  ggplot(aes(impact.baseMetricV3.cvssV3.confidentialityImpact)) +
+  geom_bar(stat = 'count', fill = 'green') +
+  labs(x = 'Confidentiality impact', y = 'No. vulns w/ given level', title = "") +
+  theme_minimal()
+
+a2 <- 
+  data %>% 
+  ggplot(aes(impact.baseMetricV3.cvssV3.integrityImpact)) +
+  geom_bar(stat = 'count', fill = 'red') +
+  labs(x = 'Integrity impact', y = 'No. vulns w/ given level', title = "") +
+  theme_minimal()
+
+a3 <- 
+  data %>% 
+  ggplot(aes(impact.baseMetricV3.cvssV3.availabilityImpact)) +
+  geom_bar(stat = 'count', fill = 'blue', na.rm = T) +
+  labs(x = 'Availability impact', y = 'No. vulns w/ given level', title = "") +
+  theme_minimal()
+
+multiplot(a1, a2, a3, cols=3, title = "Consistently large proportion of 'high' impact vulnerabilities")
+
+```
+
+We might wish to understand what proportion of those vulnerabilities have a 'High' rating across all three impact categories. This would single them out as particularly serious and good candidates to be considered defects.  
+
+To do this we subset for only vulnerabilities with a 'High' rating in all three impact categories, which singles out 241 vulnerabilities. Given that we know around 300 vulnerabilities are considered 'High' for at least one impact category, this implies that roughly 80% of 'High' impact vulnerabilities for one impact category will be considered 'High' across all (i.e. very serious). 
+
+```{r}
+
+high <- subset(data, impact.baseMetricV3.cvssV3.confidentialityImpact == "HIGH" & impact.baseMetricV3.cvssV3.integrityImpact == "HIGH" & impact.baseMetricV3.cvssV3.availabilityImpact == "HIGH")
+
+dim(high)
+
+```
+
+The dataset helpfully provides a variable called 'impact score', which appears to be a composite of the three individual impact scores where 0 = 'None', 1 = 'Low' and 2 = 'High'. Looking at this chart we can see the relative distribution across all vulnerabilities with a spike at '6' (i.e. high, high, high). 
+
+```{r, echo=FALSE, results='hide',message=FALSE, warning = FALSE}
+
+b2 <- data %>%
+  ggplot(aes(impact.baseMetricV3.impactScore)) +
+  geom_histogram(binwidth = 0.1) +
+  labs(x = 'Impact score per vuln (0-6)', y = 'No. vulns w/ given score', title = "Vulns tend to cluster around overall impact scores of 3.5 or 6") +
+  theme_minimal(); b2
+
+```
+
+### Exploitability metrics
+Exploitability metrics reflect the ease and technical means by which the vulnerability can be exploited. That is, they represent characteristics of the thing that is vulnerable.
+
+We might wish to understand which vulnerabilities are more easily exploited as this would help with our prioritization and application of the legal defects concept. The idea is that the more easily a known vulnerability could be exploited - the more likely that it would be considered a defect.
+
+The exploitability composite measure from 0-5 and includes: attack complexity [low/high], privleges required [none/low/high] and user interaction [none/required]. Being a composite measure - it is not the best metric - but does help us understand a little better the underlying distribution.
+
+We see that over 200 vulnerabiities have an exploitability score of 5, which would classify them as the most serious vulnerabilities by this measure. 
+
+```{r, echo=FALSE, results='hide',message=FALSE, warning = FALSE}
+c1 <- 
+  data %>% 
+  ggplot(aes(impact.baseMetricV3.exploitabilityScore)) +
+  geom_histogram(binwidth = 0.1) +
+  labs(x = 'Exploitability score per vuln (0-5)', y = 'No. vulns w/ given score', title = "Vulns cluster around 2.8 and 4 in terms of total exploitability") +
+  theme_minimal(); c1
+
+```
+
+### Relationship between impact and exploitability
+Now that we've gone through each of the impact and exploitability metrics, is there a relationship between then? We can potentially answer this question using a scatter plot. 
+
+Looking at the scatter plot we don't see any noticable relationship. We could do a quick check by running a linear regression, which yields a statistically non-significant result.
+
+```{r, echo=FALSE, results='hide',message=FALSE, warning = FALSE}
+
+d1 <- 
+  data %>% 
+  ggplot(aes(impact.baseMetricV3.impactScore, impact.baseMetricV3.exploitabilityScore)) +
+  geom_point() +
+  labs(x = 'Impact score per vuln (0-6)', y = 'Exploitability score per vuln (0-5)', title = "No discernible relationship between vuln impact and exploitability") +
+  theme_minimal(); d1
+
+reg <- lm(impact.baseMetricV3.impactScore ~ impact.baseMetricV3.exploitabilityScore, data); summary(reg)
+
+```
+
+### Base severity score (discrete)
+The CVSS provides what is called a 'base' severity score output, which takes the values for the following variables but does not adjust them to the temporal and environmental factors of the network/system in question:
+
+- Attack Vector, AV 
+- Attack Complexity, AC 
+- Privileges Required, PR 
+- User Interaction, UI 
+- Scope, S 
+- Confidentiality, C 
+- Integrity, I 
+- Availability, A
+
+Being a discrete variable, the severity score has to first be turned into a factor [it is coded as low, medium, high and critical'] and then levels given to the values. We can then plot the output on a bar graph. 
+
+We see that a small proportion of all vulnerabiltiies (~100 or 8%) are deemed 'Critical'. 
+
+```{r, echo=FALSE, results='hide',message=FALSE}
+as.factor(data$impact.baseMetricV3.cvssV3.baseSeverity)
+data$impact.baseMetricV3.cvssV3.baseSeverity  = factor(data$impact.baseMetricV3.cvssV3.baseSeverity, levels=c("LOW", "MEDIUM", "HIGH", "CRITICAL"))
+
+e1 <- data %>%
+  ggplot(aes(impact.baseMetricV3.cvssV3.baseSeverity)) +
+  geom_bar(stat = 'count') + 
+  labs(x = 'Base severity score per vuln (0-6)', y = 'No. vulns w/ given score', title = "A relatively small proportion of vulns are scored overall as critical") + 
+  theme_minimal(); e1
+```
+
+### Base severity score (continuous)
+The base score is also provided as a continuous variable between 0-10. This gives us some more analytical options. First let's examine the distribution of the scores. We can use the describe() function to retrieve the statistics. 
+
+We find that the mean and the median are close to one another, which would suggest a normal distribution. The low skew and kurtosis further support this inference. 
+
+If we do a histogram though we see that there are clusters around the approximate values of 6.2, 7.8, 8.4 and 9.9. The latter grouping corresponds to the 'critical' designation from the discrete score above. By overlaying a density plot we are able to see the distribution of vulnerabilities by base score. The noteworthy element is that the right tail of the distribution is quite large - certainly larger than one would find with a normal distribution. 
+
+```{r, echo=FALSE, results='hide',message=FALSE, warning = FALSE}
+describe(data$impact.baseMetricV3.cvssV3.baseScore)
+```
+
+```{r, echo=FALSE, results='hide',message=FALSE, warning = FALSE}
+f1 <- data %>%
+  ggplot(aes(impact.baseMetricV3.cvssV3.baseScore)) +
+  geom_histogram(binwidth = 0.1) +
+  labs(x = 'Base scores (0-10)', y = 'No. vulns w/ given score', title = "The distribution of base scores has interesting spikes around high levels") +
+  theme_minimal(); f1
+```
+
+```{r, echo=FALSE, results='hide',message=FALSE, warning = FALSE}
+f2 <- ggplot(data, aes(impact.baseMetricV3.cvssV3.baseScore)) + 
+  geom_histogram(aes(y = ..density..), alpha = 0.7, fill = "#333333", bins = 50) + 
+  geom_density(fill = "#ff4d4d", alpha = 0.5) + 
+  theme(panel.background = element_rect(fill = '#ffffff')) + 
+  ggtitle("Density of base scores with histogram overlay") +
+  labs(x = 'Number of vulns with given base scores (0-10)', y = 'Density',
+       title = "Note the larger right tail than a normal distribution") 
+
+f2 <- ggplotly(f2)
+f2
+
+```
+
+We're partially interested in the probability that a vulnerability will be critical or not (given the empirical sample, which isn't ideal). Below is a density plot that shows clearly the right skew of the dataset. The percentiles are also calculated in a table below.
+
+```{r, echo=FALSE,message=FALSE, warning = FALSE}
+
+z2 <- ggplot(data, aes(impact.baseMetricV3.cvssV3.baseScore)) + 
+  geom_density(fill = "#ff4d4d", alpha = 0.5) + 
+  ggtitle("Density of base scores with histogram overlay") +
+  labs(x = 'Number of vulns with given base scores (0-10)', y = 'Density',
+       title = "We see the right skewed tail clearer in this chart") +
+  theme_minimal(); z2
+
+quantile(data$impact.baseMetricV3.cvssV3.baseScore, c(.01, .1, .2, .33, .5, .66, .9, .99), na.rm = T) 
+```
+
+Now that we've identified the 'critical' subset of vulnerabilities, let's take a deeper look to see what they have in common. The first thing we can do is extract the vendor whose software possesses the vulnerability and see if there's any over-represented companies.
+
+Below the first 20 companies, by frequency of vulnerabilities, is displayed. 
+
+```{r, echo=FALSE, message=FALSE, warning = FALSE}
+critVendor <- jsonData[['CVE_Items']][['cve.affects.vendor.vendor_data']]
+
+fmNames <- sapply(critVendor, function(x) x[['vendor_name']])
+fmNames <- unlist(fmNames)
+companies <- count(fmNames)
+sortedCompanies <- companies[order(-companies$freq) , ]
+
+head(sortedCompanies,20)
+  
+```
+
+We can do this again to get the top 20 products, by frequency of vulnerabilities. 
+
+```{r, echo=FALSE, message=FALSE, warning = FALSE}
+
+critProduct <- jsonData[['CVE_Items']][['cve.affects.vendor.vendor_data']]
+inter <- sapply(critProduct, function(x) x[['product.product_data']])
+productNames <- sapply(inter, function(x) x[[1]][['product_name']])
+
+productNames <- unlist(productNames)
+products <- count(productNames)
+sortedProducts <- products[order(-products$freq) , ]
+
+head(sortedProducts,20)
+
+```
+### Rate at which vulns are published over time
+Out of interest - have there been more vulnerabilities published over time? If we plot the dates that the vulns are published we can see. We can also put these values in a table to see that a substantially larger number of vulns were published in 2019 than any other year. 
+
+```{r, echo=FALSE, results='hide',message=FALSE, warning = FALSE}
+as.Date(data$publishedDate)
+
+ggplot(data, aes(x=publishedDate)) + 
+geom_point(aes(y=impact.baseMetricV3.cvssV3.baseScore)) + 
+  labs(title="Vulnerabilities seem to have been published more frequently over time", 
+     subtitle="Number of vulnerabilities published over time", 
+      caption="Source: NVD database", 
+     x="Published date 2014-2019",
+     y="Base score per vulnerability") +
+  theme_minimal()
+
+years <- substring(data$publishedDate,0,4) 
+table(years)
+
+```
