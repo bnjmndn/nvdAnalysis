@@ -1,4 +1,4 @@
-# nvdAnalysis - exploring the National Vulnerability Database for severity of vulns
+# nvdAnalysis: Exploring the National Vulnerability Database for severity of vulns
 ## Introduction
 This workbook analyzes data from the [National Vulnerability Database (NVD)](https://nvd.nist.gov), which is the U.S. government repository of standards based vulnerability management data represented using the Security Content Automation Protocol (SCAP). The NVD includes databases of security checklist references, security-related software flaws, misconfigurations, product names, and impact metrics.
 
