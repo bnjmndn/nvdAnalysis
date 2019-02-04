@@ -1,0 +1,141 @@
+---
+title: "Text mining the CVE dataset"
+output: html_notebook
+---
+
+We're going to follow this guide to text mining in R: https://onepager.togaware.com/TextMiningO.pdf
+
+To start with we import a series of libraries and create a few functions to permit analysis and visualization of the NVD dataset.
+
+```{r, echo=FALSE, results='hide',message=FALSE, warning = FALSE}
+#library(rjson)
+library(tm) # Framework for text mining.
+library(qdap) # Quantitative discourse analysis of transcripts. library(qdapDictionaries)
+library(dplyr) # Data wrangling, pipe operator %>%().
+library(RColorBrewer) # Generate palette of colours for plots.
+library(ggplot2) # Plot word frequencies.
+library(scales) # Include commas in numbers.
+library(Rgraphviz) # Correlation plots.
+
+
+multiplot <- function(..., plotlist = NULL, file, cols = 1, layout = NULL) {
+  require(grid)
+
+  plots <- c(list(...), plotlist)
+
+  numPlots = length(plots)
+
+  if (is.null(layout)) {
+    layout <- matrix(seq(1, cols * ceiling(numPlots/cols)),
+                    ncol = cols, nrow = ceiling(numPlots/cols))
+  }
+
+  if (numPlots == 1) {
+    print(plots[[1]])
+
+  } else {
+    grid.newpage()
+    pushViewport(viewport(layout = grid.layout(nrow(layout), ncol(layout))))
+
+    for (i in 1:numPlots) {
+      matchidx <- as.data.frame(which(layout == i, arr.ind = TRUE))
+
+      print(plots[[i]], vp = viewport(layout.pos.row = matchidx$row,
+                                      layout.pos.col = matchidx$col))
+    }
+  }
+}
+```
+
+Import and clean-up dataset
+
+```{r}
+
+data <- read.table("cveDataset.csv", sep = ";", header = T, fill = T)
+
+```
+
+The best we can probably do with this dataset is mine the descriptions to find certain terms that refer to generic software vulns or incidents due to exploitation of those vulns. 
+
+```{r}
+#head(data$Description, 50)
+```
+
+Taking a look over the first 50 rows we can already isolate a few:
+- denial of service
+- buffer overflow
+- Buffer overflow
+- bypass access restrictions
+- access remote
+- Delete
+- delete
+- root
+- spoofing
+- credentials
+- leak
+- modify
+- SQL Injection
+
+Another way to generate a more complete list would be to do some text mining. 
+
+```{r}
+
+# create corpus
+myCorpus <- Corpus(VectorSource(data$Description))
+
+# clean up data
+myCorpus <- tm_map(myCorpus, tolower)
+
+# remove punctuation
+myCorpus <- tm_map(myCorpus, removePunctuation)
+
+# remove numbers
+myCorpus <- tm_map(myCorpus, removeNumbers)
+
+# remove stopwords
+# keep "r" by removing it from stopwords
+#myStopwords <- c(stopwords('english'), "available", "via")
+#idx <- which(myStopwords == "r")
+#myStopwords <- myStopwords[-idx]
+#myCorpus <- tm_map(myCorpus, removeWords, myStopwords)
+
+# Remove english common stopwords
+myCorpus <- tm_map(myCorpus, removeWords, stopwords("english"))
+
+# Remove your own stop word
+# specify your stopwords as a character vector
+# myCorpus <- tm_map(myCorpus, removeWords, c("blabla1", "blabla2")) 
+
+# Replace a few punctuation signs with a space
+toSpace <- content_transformer(function(x, pattern) gsub(pattern, " ", x))
+myCorpus <- tm_map(myCorpus, toSpace, "/|@|\\|")
+
+# Strip whitespace
+myCorpus <- tm_map(myCorpus, stripWhitespace)
+
+
+```
+
+Now let's create a term document matrix. 
+
+```{r}
+myDtm <- TermDocumentMatrix(myCorpus, control = list(minWordLength = 5))
+
+#m <- as.matrix(myDtm)
+#v <- sort(rowSums(m),decreasing=TRUE)
+#d <- data.frame(word = names(v),freq=v)
+inspect(myDtm)
+
+```
+
+Look at word frequency and associations.
+
+```{r}
+freq <- colSums(as.matrix(myDtm))
+length(freq)
+
+# which words are associated with "denial"?
+findAssocs(myDtm, 'denial', 0.30)
+
+```
+
