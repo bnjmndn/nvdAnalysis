@@ -11,9 +11,9 @@ This work is part of an ongoing project with the [Center for Democracy and Techn
 In the NVD database, the [Common Vulnerability Scoring System (CVSS)](https://www.first.org/cvss/user-guide) is used to score the impact and severity of each vulnerability. By exploring the NVD and examining the distribution of severity and impact of the known vulnerabilities we are able to better inform efforts to apply the legal concept of 'defects' to these technologies. While it may be true that it is 'difficult to write bug free code' or that 'not all bugs can be known ahead of time', that does not mean that there are known critical vulnerabilities that should be fixed before these technologies are shipped. Identifying the frequency of these vulnerabiltiies appearing in software helps us identify and determine a severity threshold at which a vulnerability might render a product as 'defective' (and thus subject to strict products liability claims). 
 
 ## Outputs
-- [md notebook w/ images](https://github.com/bnjmndn/nvdAnalysis/blob/master/nvdDataset.md)
+- [md notebook](https://github.com/bnjmndn/nvdAnalysis/blob/master/nvdDataset.md) w/ images
 - [pdf output](https://github.com/bnjmndn/nvdAnalysis/blob/master/Analysing%20the%20NVD%20database%20to%20understand%20the%20distribution%20of%20severity%20of%20vulnerabilities.pdf)
-- [html output](https://github.com/bnjmndn/nvdAnalysis/blob/master/Analysing%20the%20NVD%20database%20to%20understand%20the%20distribution%20of%20severity%20of%20vulnerabilities.html)
+- [html output](https://github.com/bnjmndn/nvdAnalysis/blob/master/Analysing%20the%20NVD%20database%20to%20understand%20the%20distribution%20of%20severity%20of%20vulnerabilities.html) w/out images
 
 ## Dependent packages
 - [jsonlite](https://cran.r-project.org/web/packages/jsonlite/)
