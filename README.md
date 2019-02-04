@@ -1,6 +1,6 @@
 # nvdAnalysis - exploring the National Vulnerability Database for severity of vulns
 ## Introduction
-This workbook analyzes data from the National Vulnerability Database (NVD) [link](https://nvd.nist.gov), which is the U.S. government repository of standards based vulnerability management data represented using the Security Content Automation Protocol (SCAP). The NVD includes databases of security checklist references, security-related software flaws, misconfigurations, product names, and impact metrics.
+This workbook analyzes data from the [National Vulnerability Database (NVD)](https://nvd.nist.gov), which is the U.S. government repository of standards based vulnerability management data represented using the Security Content Automation Protocol (SCAP). The NVD includes databases of security checklist references, security-related software flaws, misconfigurations, product names, and impact metrics.
 
 ## Data
 The dataset has been converted from JSON to CSV format to allow for easier analysis in R. The original JSON or XML formats are available [here](https://nvd.nist.gov/vuln/data-feeds).
