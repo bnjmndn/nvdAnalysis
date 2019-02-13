@@ -23,3 +23,4 @@ In the NVD database, the [Common Vulnerability Scoring System (CVSS)](https://ww
 - [grid](https://cran.r-project.org/src/contrib/Archive/grid/)
 - [plyr](https://cran.r-project.org/web/packages/plyr/)
 - [psych](https://cran.r-project.org/web/packages/psych/)
+# exploitDB-hardware
